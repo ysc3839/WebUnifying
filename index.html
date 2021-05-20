@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WebUnifying</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <noscript>
+    <style>
+      #content {
+        display: none !important;
+      }
+    </style>
+  </noscript>
+  <script>
+    // From https://github.com/bentiss/uLogitech, license GPLv2.
+
+    const USB_VENDOR_ID_LOGITECH = 0x046d;
+    const USB_DEVICE_ID_UNIFYING_RECEIVER = 0xc52b;
+    const USB_DEVICE_ID_UNIFYING_RECEIVER_2 = 0xc532;
+
+    const REPORT_ID_SHORT = 0x10;
+    const RECEIVER_IDX = 0xFF;
+    const SET_REGISTER_REQ = 0x80;
+
+    const __CMD_DEVICE_CONNECTION_DISCONNECTION = 0xB2;
+    const CONNECT_DEVICES_OPEN_LOCK = 1;
+    const CONNECT_DEVICES_CLOSE_LOCK = 2;
+    const CONNECT_DEVICES_DISCONNECT = 3;
+
+    function CMD_DEVICE_CONNECTION_DISCONNECTION(idx, cmd, timeout) {
+      return Uint8Array.from([
+        /* .device_idx = */RECEIVER_IDX,
+        /* .sub_id = */SET_REGISTER_REQ,
+        /* .address = */__CMD_DEVICE_CONNECTION_DISCONNECTION,
+        /* .parameters = { */
+        cmd, idx, timeout
+        /* } */
+      ]);
+    }
+
+    async function selectAndOpen() {
+      const [device] = await navigator.hid.requestDevice({
+        filters: [{
+          vendorId: USB_VENDOR_ID_LOGITECH,
+          productId: USB_DEVICE_ID_UNIFYING_RECEIVER,
+          usagePage: 0xff00,
+        }, {
+          vendorId: USB_VENDOR_ID_LOGITECH,
+          productId: USB_DEVICE_ID_UNIFYING_RECEIVER_2,
+          usagePage: 0xff00,
+        }]
+      });
+      if (device) {
+        if (!device.opened) {
+          await device.open();
+        }
+        return device;
+      }
+      return null;
+    }
+
+    async function pair() {
+      const device = await selectAndOpen();
+      if (device) {
+        const msg = CMD_DEVICE_CONNECTION_DISCONNECTION(0, CONNECT_DEVICES_OPEN_LOCK, 0x08);
+        await device.sendReport(REPORT_ID_SHORT, msg);
+        await device.close();
+        document.getElementById("tip").innerText = "Receiver pair is enabled. Turn on device to connect.";
+      }
+    }
+
+    async function unpair() {
+      const device = await selectAndOpen();
+      if (device) {
+        const msg = CMD_DEVICE_CONNECTION_DISCONNECTION(1, CONNECT_DEVICES_DISCONNECT, 0x00);
+        await device.sendReport(REPORT_ID_SHORT, msg);
+        await device.close();
+        document.getElementById("tip").innerText = "Device unpaired.";
+      }
+    }
+  </script>
+</head>
+<body>
+  <noscript>JavaScript is required</noscript>
+  <div id="content">
+    <button onclick="pair()">Select receiver to pair</button>
+    <button onclick="unpair()">Unpair first device</button>
+    <span id="tip"></span>
+  </div>
+</body>
+</html>
